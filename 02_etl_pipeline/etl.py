@@ -57,7 +57,8 @@ def extract_and_load():
     # Right now, price looks like "£51.77". Let's keep it as a string for the RAW table, 
     # but strip whitespace just in case.
     df['title'] = df['title'].str.strip()
-    df['price'] = df['price'].str.strip()
+    # Fix the encoding issue and remove currency symbols for numeric parsing
+    df['price'] = df['price'].str.replace('Â', '', regex=False).str.replace('£', '', regex=False).str.strip()
     df['availability'] = df['availability'].str.strip()
 
     # LOAD: Insert into Database
@@ -69,6 +70,9 @@ def extract_and_load():
     
     try:
         # Create the table structure
+        # Fix the encoding issue and remove currency symbols for numeric parsing
+        df['price'] = df['price'].str.replace('Â', '', regex=False).str.replace('£', '', regex=False).str.strip()        
+        
         create_table(cursor)
         
         # Clear out old data so we don't get duplicates if we run this twice
