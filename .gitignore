@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Docker
+*.log
+
+# OS
+.DS_Store
