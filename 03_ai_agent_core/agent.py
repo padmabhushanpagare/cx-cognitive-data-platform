@@ -1,3 +1,4 @@
+import os
 from typing import Annotated, TypedDict
 from langchain_chroma import Chroma
 from langchain_core.tools import tool
@@ -12,7 +13,9 @@ class AgentState(TypedDict):
 
 print("Loading Vector Database...")
 embeddings = get_embedding_model()
-vectorstore = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
+# FORCE THE PATH TO BE RELATIVE TO THIS SCRIPT, NO MATTER WHERE IT IS RUN FROM
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db")
+vectorstore = Chroma(persist_directory=DB_PATH, embedding_function=embeddings)
 
 @tool
 def search_books(query: str) -> str:
@@ -80,7 +83,8 @@ if __name__ == "__main__":
         "You are a helpful customer service agent for a bookstore. "
         "Your job is to answer customer questions about books using the search_books tool. "
         "CRITICAL RULE 1: Once the search_books tool returns a result, you MUST immediately answer the customer. Do NOT call the tool again. "
-        "CRITICAL RULE 2: If the customer asks for a refund, is angry, or asks to speak to a human, you MUST use the escalate_to_human tool. "
+        "CRITICAL RULE 2: If the tool returns 'No books found', you MUST tell the customer we don't have it. Do NOT search again. "
+        "CRITICAL RULE 3: If the customer asks for a refund, is angry, or asks to speak to a human, you MUST use the escalate_to_human tool. "
         "Do not try to solve refunds yourself."
     ))
     

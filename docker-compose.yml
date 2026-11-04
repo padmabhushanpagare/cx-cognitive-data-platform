@@ -14,5 +14,24 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  api:
+    build: ./03_ai_agent_core
+    container_name: cx_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres_db
+    # Note: We are using host networking for Ollama access later, but for now, standard port mapping works.
+    environment:
+      - LLM_PROVIDER=ollama
+
+  frontend:
+    build: ./04_fullstack_app
+    container_name: cx_frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
