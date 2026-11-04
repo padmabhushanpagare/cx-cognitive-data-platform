@@ -1,11 +1,13 @@
+import os
 import pandas as pd
 from langchain_core.documents import Document
 from langchain_chroma import Chroma
 from llm_factory import get_embedding_model  # <--- USE THE FACTORY
 
 # 1. Load the clean data
-CSV_PATH = "../01_data_ingestion/raw_data/books_raw.csv"
-print("Loading data...")
+# Use environment variable if inside Docker, otherwise fallback to relative path
+CSV_PATH = os.getenv("CSV_PATH", "../01_data_ingestion/raw_data/books_raw.csv")
+print(f"Loading data from {CSV_PATH}...")
 df = pd.read_csv(CSV_PATH)
 
 # 2. Convert rows to LangChain Document objects

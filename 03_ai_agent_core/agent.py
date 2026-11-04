@@ -7,6 +7,7 @@ from llm_factory import get_chat_model, get_embedding_model # <--- USE THE FACTO
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -67,7 +68,8 @@ def route_after_agent(state: AgentState):
 graph_builder.add_conditional_edges("agent", route_after_agent)
 graph_builder.add_edge("tools", "agent")
 
-agent_app = graph_builder.compile()
+memory = MemorySaver()
+agent_app = graph_builder.compile(checkpointer=memory)
 print("Agent successfully compiled!")
 
 from langchain_core.messages import SystemMessage, HumanMessage
