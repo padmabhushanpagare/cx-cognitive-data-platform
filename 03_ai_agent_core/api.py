@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from agent import agent_app 
+from ml_router import predict_intent
 
 app = FastAPI(title="Enterprise CX Platform API")
 
@@ -45,20 +46,29 @@ def log_to_db(user_msg: str, ai_msg: str, escalated: bool):
     except Exception as e:
         print(f"Database logging failed: {e}")
 
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
+    # 1. ML ROUTING: Predict intent instantly using PyTorch
+    predicted_intent = predict_intent(request.message)
+    print(f"\n[ML ROUTER] Detected Intent: {predicted_intent}")
+    
+    # 2. DETERMINISTIC ROUTING: If angry, bypass LLM and escalate immediately
+    if predicted_intent == "escalate":
+        final_response = "I understand you are frustrated. I am transferring you to a human agent immediately."
+        log_to_db(request.message, final_response, True)
+        return ChatResponse(response=final_response, requires_human=True)
+
+    # 3. LLM ROUTING: If it's a normal query, send to Llama 3.1
     system_prompt = SystemMessage(content=(
         "You are a helpful e-commerce customer service agent. "
         "Your job is to answer customer questions about their orders using the check_order_status tool. "
         "CRITICAL RULE 1: Once the tool returns the order status, answer the customer immediately. Do not call the tool again. "
-        "CRITICAL RULE 2: If the customer is angry, asks for a refund, or asks for a human, use the escalate_to_human tool. "
-        "Do not make up order statuses. Only use the tool."
+        "CRITICAL RULE 2: If the customer asks for a refund or human, use the escalate_to_human tool. "
+        "Do not make up order statuses."
     ))
 
-    # Pass the session_id as the thread_id to LangGraph memory
     config = {"configurable": {"thread_id": request.session_id}, "recursion_limit": 6}
-    
-    # If it's a new session, we inject the System Prompt. If not, LangGraph remembers it.
     state = agent_app.get_state(config)
     if not state.values:
         inputs = {"messages": [system_prompt, HumanMessage(content=request.message)]}
@@ -82,7 +92,6 @@ async def chat_endpoint(request: ChatRequest):
     
     log_to_db(request.message, final_response, requires_human)
     return ChatResponse(response=final_response, requires_human=requires_human)
-
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
