@@ -74,19 +74,41 @@ with tab3:
     st.header("Automated Quality Assurance Scores")
     st.markdown("This AI evaluates 100% of interactions against compliance and empathy rubrics.")
     
+    # Fetch scores along with log_id so we can update them
     qa_df = get_data("""
-        SELECT c.user_message, c.ai_response, q.overall_score, q.qa_feedback, q.requires_human_review 
+        SELECT q.score_id, q.log_id, c.user_message, c.ai_response, q.overall_score, q.qa_feedback, q.requires_human_review 
         FROM fact_quality_scores q
         JOIN conversation_logs c ON q.log_id = c.id
         ORDER BY q.evaluated_at DESC;
     """)
     
     if not qa_df.empty:
-        # Highlight interactions that need human review
-        needs_review = qa_df[qa_df['requires_human_review'] == True]
-        if not needs_review.empty:
-            st.error(f"⚠️ {len(needs_review)} interactions flagged for human QA review due to policy or empathy concerns.")
-            
-        st.dataframe(qa_df[['user_message', 'ai_response', 'overall_score', 'qa_feedback']])
+        for index, row in qa_df.iterrows():
+            with st.expander(f"Log #{row['log_id']} - AI Score: {row['overall_score']}/5"):
+                st.write(f"**Customer:** {row['user_message']}")
+                st.write(f"**AI Agent:** {row['ai_response']}")
+                st.info(f"**AI QA Feedback:** {row['qa_feedback']}")
+                
+                # Human-in-the-loop override
+                st.markdown("### Human Supervisor Review")
+                human_score = st.slider("Override Score (1-5)", 1, 5, int(row['overall_score']), key=f"slider_{row['score_id']}")
+                human_feedback = st.text_input("Supervisor Comments", key=f"text_{row['score_id']}")
+                
+                if st.button("Submit Human Override", key=f"btn_{row['score_id']}"):
+                    try:
+                        conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user="admin", password="cx_secret_password", dbname="cx_platform")
+                        cursor = conn.cursor()
+                        # Update the overall score and append human feedback
+                        new_feedback = f"[HUMAN OVERRIDE] {human_feedback} | (AI originally scored: {row['overall_score']})"
+                        cursor.execute(
+                            "UPDATE fact_quality_scores SET overall_score = %s, qa_feedback = %s WHERE score_id = %s",
+                            (human_score, new_feedback, row['score_id'])
+                        )
+                        conn.commit()
+                        conn.close()
+                        st.success("Human override saved! The AI's score has been adjusted.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to save override: {e}")
     else:
         st.info("No QA scores found. Run the QA evaluator script.")
