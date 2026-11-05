@@ -15,6 +15,7 @@ DB_PORT = os.getenv("DB_PORT", "5434")
 class ChatRequest(BaseModel):
     message: str
     session_id: str  # <--- NEW: Required to track conversation memory
+        customer_id: str = "CUST-1001" # Defaulting to a valid customer for testing
 
 class ChatResponse(BaseModel):
     response: str
@@ -62,21 +63,26 @@ async def chat_endpoint(request: ChatRequest):
 
     # 2. DETERMINISTIC ROUTING: If angry, bypass LLM and escalate immediately
     if predicted_intent == "escalate":
-        final_response = "I understand you are frustrated. I am transferring you to a human agent immediately."
-        
-        # Persist the handoff ticket to PostgreSQL
         try:
             conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user="admin", password="cx_secret_password", dbname="cx_platform")
             cursor = conn.cursor()
+            # Actually insert and commit
             cursor.execute("INSERT INTO fact_handoffs (customer_message, status) VALUES (%s, 'OPEN')", (request.message,))
             conn.commit()
             conn.close()
-        except Exception as e:
-            print(f"Failed to create ticket: {e}")
             
-        log_to_db(request.message, final_response, True)
-        return ChatResponse(response=final_response, requires_human=True)
-
+            # Only return success if the DB transaction succeeded
+            final_response = "I understand you are frustrated. I am transferring you to a human agent immediately."
+            log_to_db(request.message, final_response, True)
+            return ChatResponse(response=final_response, requires_human=True)
+            
+        except Exception as e:
+            print(f"CRITICAL: Ticket creation failed: {e}")
+            # Honest failure to the user
+            final_response = "I apologize, but our ticketing system is currently down. Please try again later or call our support line."
+            log_to_db(request.message, final_response, True)
+            return ChatResponse(response=final_response, requires_human=False) # Don't say we transferred if we didn't
+            
     # 3. GENERAL ROUTING (No LLM needed for simple policy questions)
     if predicted_intent == "general":
         final_response = "For general inquiries, please visit our FAQ page at example.com/faq."
@@ -85,9 +91,10 @@ async def chat_endpoint(request: ChatRequest):
 
     # 4. LLM ROUTING: For order tracking
     system_prompt = SystemMessage(content=(
-        "You are a helpful e-commerce customer service agent. "
-        "Your job is to answer customer questions about their orders using the check_order_status tool. "
-        "CRITICAL RULE 1: Once the tool returns the order status, answer the customer immediately. Do not call the tool again. "
+        f"You are a helpful e-commerce customer service agent. The customer's ID is {request.customer_id}. "
+        "Your job is to answer questions about their orders using the check_order_status tool. "
+        "CRITICAL: You MUST use the customer's ID when checking order status. "
+        "CRITICAL: Once the tool returns the order status, answer the customer immediately. "
         "Do not make up order statuses."
     ))
 

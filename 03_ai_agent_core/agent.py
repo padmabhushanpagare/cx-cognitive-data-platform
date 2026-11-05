@@ -13,30 +13,25 @@ class AgentState(TypedDict):
 
 # 1. NEW TOOL: Check Order Status
 @tool
-def check_order_status(order_id: str) -> str:
-    """Use this tool to look up the status, amount, and customer of an order. The user must provide an order ID (e.g., ORD-5001)."""
-    print(f"\n[AGENT ACTION] Querying PostgreSQL for Order: {order_id}")
+def check_order_status(order_id: str, customer_id: str) -> str:
+    """Use this tool to look up the status of an order. Requires both order_id (e.g., ORD-5001) and the customer's ID."""
+    print(f"\n[AGENT ACTION] Querying Order: {order_id} for Customer: {customer_id}")
     
-    # Read DB config from environment variables (Docker)
     db_host = os.getenv("DB_HOST", "localhost")
     db_port = os.getenv("DB_PORT", "5434")
     
     try:
-        conn = psycopg2.connect(
-            host=db_host, port=db_port, user="admin", 
-            password="cx_secret_password", dbname="cx_platform"
-        )
+        conn = psycopg2.connect(host=db_host, port=db_port, user="admin", password="cx_secret_password", dbname="cx_platform")
         cursor = conn.cursor()
         
-        # Use a JOIN to get both order info and customer name
+        # SECURITY: Query requires BOTH order_id and customer_id to match
         query = """
             SELECT o.order_id, c.name, o.status, o.amount, o.order_date 
             FROM fact_orders o
             JOIN dim_customers c ON o.customer_id = c.customer_id
-            WHERE o.order_id = %s;
+            WHERE o.order_id = %s AND o.customer_id = %s;
         """
-        # The comma after order_id is crucial for Python to pass it as a tuple
-        cursor.execute(query, (order_id.strip().upper(),)) 
+        cursor.execute(query, (order_id.strip().upper(), customer_id.strip().upper()))
         result = cursor.fetchone()
         
         cursor.close()
@@ -45,7 +40,7 @@ def check_order_status(order_id: str) -> str:
         if result:
             return f"Order {result[0]} for {result[1]}: Status is '{result[2]}'. Amount: ${result[3]}. Ordered on: {result[4]}."
         else:
-            return f"Order {order_id} not found in our system."
+            return f"Order {order_id} not found, or you are not authorized to view it."
             
     except Exception as e:
         return f"Database error: {e}"
