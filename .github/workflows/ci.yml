@@ -1,0 +1,66 @@
+name: Python CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # 1. Spin up a temporary PostgreSQL database for the tests
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: cx_secret_password
+          POSTGRES_DB: cx_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    # 2. Install dependencies (PyTorch CPU, testing libs, etc.)
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install -r 03_ai_agent_core/requirements.txt
+        pip install -r 06_eval_framework/requirements.txt
+
+    # 3. Seed the database so the SQL test has data to query
+    - name: Initialize Test Database
+      env:
+        PGPASSWORD: cx_secret_password
+      run: |
+        psql -h localhost -U admin -d cx_platform -c "
+        CREATE TABLE dim_customers (customer_id VARCHAR(50) PRIMARY KEY, name VARCHAR(100));
+        CREATE TABLE fact_orders (order_id VARCHAR(50) PRIMARY KEY, customer_id VARCHAR(50), status VARCHAR(50), amount DECIMAL, order_date DATE);
+        INSERT INTO dim_customers VALUES ('CUST-1008', 'Test User');
+        INSERT INTO fact_orders VALUES ('ORD-5003', 'CUST-1008', 'Delayed', 100.00, '2026-01-01');"
+
+    # 4. Run the Pytest suite
+    - name: Run Evaluation Tests
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        LLM_PROVIDER: ollama
+      run: |
+        cd 06_eval_framework
+        pytest -v -s test_reliability.py
