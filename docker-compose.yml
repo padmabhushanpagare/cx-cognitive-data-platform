@@ -39,9 +39,8 @@ services:
       - DB_USER=${DB_USER:-admin}
       - DB_PASSWORD=${DB_PASSWORD:-cx_secret_password}
       - DB_NAME=${DB_NAME:-cx_platform}
-      - CSV_PATH=/data/books_raw.csv
+      
     volumes:
-      - ./01_data_ingestion/raw_data:/data  # <--- Mounts host folder to /data
       - chroma_data:/app/chroma_db          # <--- Persists the vector DB
     dns:
       - 8.8.8.8

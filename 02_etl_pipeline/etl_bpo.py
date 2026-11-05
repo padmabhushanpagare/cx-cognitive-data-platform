@@ -12,37 +12,28 @@ print("Creating Star Schema tables...")
 
 # 1. Create Dimension Table
 cursor.execute("""
-    DROP TABLE IF EXISTS dim_customers CASCADE;
-    CREATE TABLE dim_customers (
+    CREATE TABLE IF NOT EXISTS dim_customers (
         customer_id VARCHAR(50) PRIMARY KEY,
         name VARCHAR(100),
         email VARCHAR(100),
         tier VARCHAR(50)
     );
-""")
-
-# 2. Create Fact Table
-cursor.execute("""
-    DROP TABLE IF EXISTS fact_orders CASCADE;
-    CREATE TABLE fact_orders (
+    CREATE TABLE IF NOT EXISTS fact_orders (
         order_id VARCHAR(50) PRIMARY KEY,
         customer_id VARCHAR(50) REFERENCES dim_customers(customer_id),
         status VARCHAR(50),
         amount DECIMAL(10, 2),
         order_date DATE
     );
-""")
-
-# 3. Create Handoff Ticketing Table
-cursor.execute("""
-    DROP TABLE IF EXISTS fact_handoffs CASCADE;
-    CREATE TABLE fact_handoffs (
+    CREATE TABLE IF NOT EXISTS fact_handoffs (
         ticket_id SERIAL PRIMARY KEY,
         customer_message TEXT,
         status VARCHAR(50) DEFAULT 'OPEN',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 """)
+# Before inserting, clean old data (except handoffs)
+cursor.execute("TRUNCATE TABLE fact_orders, dim_customers CASCADE;")
 
 # 4. Load Data
 print("Loading data into database...")

@@ -7,6 +7,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+from db import get_db_connection
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -21,7 +22,7 @@ def check_order_status(order_id: str, customer_id: str) -> str:
     db_port = os.getenv("DB_PORT", "5434")
     
     try:
-        conn = psycopg2.connect(host=db_host, port=db_port, user="admin", password="cx_secret_password", dbname="cx_platform")
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         # SECURITY: Query requires BOTH order_id and customer_id to match
