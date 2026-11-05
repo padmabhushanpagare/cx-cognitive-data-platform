@@ -1,0 +1,21 @@
+customer_id,name,email,tier
+CUST-1001,Charlie Brown,user1@example.com,VIP
+CUST-1002,John Johnson,user2@example.com,Premium
+CUST-1003,Charlie Johnson,user3@example.com,VIP
+CUST-1004,Frank Brown,user4@example.com,VIP
+CUST-1005,Frank Brown,user5@example.com,VIP
+CUST-1006,Jane Anderson,user6@example.com,Premium
+CUST-1007,Bob Johnson,user7@example.com,Premium
+CUST-1008,John Anderson,user8@example.com,Premium
+CUST-1009,Jane Taylor,user9@example.com,Premium
+CUST-1010,Bob Anderson,user10@example.com,VIP
+CUST-1011,Diana Johnson,user11@example.com,Standard
+CUST-1012,Diana Anderson,user12@example.com,Standard
+CUST-1013,Alice Smith,user13@example.com,VIP
+CUST-1014,Diana Anderson,user14@example.com,Premium
+CUST-1015,Alice Brown,user15@example.com,Premium
+CUST-1016,Diana Brown,user16@example.com,VIP
+CUST-1017,Bob Doe,user17@example.com,Standard
+CUST-1018,Jane Taylor,user18@example.com,Standard
+CUST-1019,Eve Doe,user19@example.com,Premium
+CUST-1020,Diana Doe,user20@example.com,Standard
