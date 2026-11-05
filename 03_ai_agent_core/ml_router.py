@@ -15,15 +15,30 @@ class IntentClassifier(nn.Module):
         out = self.fc2(out)
         return out
 
-# Load artifacts relative to this script's location
+# 1. Define absolute paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ARTIFACTS_DIR = os.path.join(BASE_DIR, "artifacts") # <--- Added artifacts folder
-vectorizer = joblib.load(os.path.join(BASE_DIR, "vectorizer.pkl"))
-label_encoder = joblib.load(os.path.join(BASE_DIR, "label_encoder.pkl"))
+ARTIFACTS_DIR = os.path.join(BASE_DIR, "artifacts")
+VECTORIZER_PATH = os.path.join(ARTIFACTS_DIR, "vectorizer.pkl")
+MODEL_PATH = os.path.join(ARTIFACTS_DIR, "intent_model.pth")
+ENCODER_PATH = os.path.join(ARTIFACTS_DIR, "label_encoder.pkl")
 
+# 2. Print diagnostics BEFORE loading
+print(f"\n--- ML ROUTER DIAGNOSTICS ---")
+print(f"Loading from: {ARTIFACTS_DIR}")
+print(f"Vectorizer exists: {os.path.exists(VECTORIZER_PATH)}")
+print(f"Model exists: {os.path.exists(MODEL_PATH)}")
+
+# 3. Load the artifacts
+vectorizer = joblib.load(VECTORIZER_PATH)
+label_encoder = joblib.load(ENCODER_PATH)
+
+# 4. Verify the feature size
 input_size = len(vectorizer.get_feature_names_out())
+print(f"--- ML ROUTER LOADED: {input_size} FEATURES ---\n")
+
+# 5. Initialize and load the model weights
 model = IntentClassifier(input_size, 64, len(label_encoder.classes_))
-model.load_state_dict(torch.load(os.path.join(ARTIFACTS_DIR, "intent_model.pth"), map_location=torch.device('cpu')))
+model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
 model.eval()
 
 def predict_intent(text: str):
@@ -32,9 +47,8 @@ def predict_intent(text: str):
     
     with torch.no_grad():
         output = model(X_tensor)
-        # Get probabilities using Softmax
         probabilities = torch.nn.functional.softmax(output, dim=1)
         confidence, predicted = torch.max(probabilities, 1)
         
     intent = label_encoder.inverse_transform(predicted.numpy())[0]
-    return intent, confidence.item() # <--- Return both intent and confidence
+    return intent, confidence.item()

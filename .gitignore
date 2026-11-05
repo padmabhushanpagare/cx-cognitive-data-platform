@@ -18,4 +18,5 @@ venv/
 # Generated Data and Artifacts
 raw_data/
 chroma_db/
+arifacts/
 *.sqlite3
