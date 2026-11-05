@@ -10,7 +10,7 @@ cursor = conn.cursor()
 
 print("Creating Star Schema tables...")
 
-# 1. Create Dimension Table
+# 1. Create Dimension, Fact Tables
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS dim_customers (
         customer_id VARCHAR(50) PRIMARY KEY,
@@ -30,6 +30,20 @@ cursor.execute("""
         customer_message TEXT,
         status VARCHAR(50) DEFAULT 'OPEN',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+""")
+# Create QA Scores Table
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fact_quality_scores (
+        score_id SERIAL PRIMARY KEY,
+        log_id INTEGER REFERENCES conversation_logs(id),
+        overall_score INTEGER,
+        resolution_score INTEGER,
+        empathy_score INTEGER,
+        policy_score INTEGER,
+        requires_human_review BOOLEAN,
+        qa_feedback TEXT,
+        evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 """)
 # Before inserting, clean old data (except handoffs)

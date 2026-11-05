@@ -24,8 +24,7 @@ def get_data(query):
         return pd.DataFrame()
 
 # --- TABS ---
-tab1, tab2 = st.tabs(["📈 Analytics Overview", "🎧 Supervisor Handoff Queue"])
-
+tab1, tab2, tab3 = st.tabs(["📈 Analytics Overview", "🎧 Supervisor Handoff Queue", "🕵️ AI Quality Assurance"])
 with tab1:
     st.header("Operational Metrics")
     df = get_data("SELECT * FROM conversation_logs ORDER BY timestamp DESC;")
@@ -70,3 +69,24 @@ with tab2:
                         st.error(f"Failed to update ticket: {e}")
     else:
         st.success("🎉 No open tickets! The AI has handled everything.")
+
+with tab3:
+    st.header("Automated Quality Assurance Scores")
+    st.markdown("This AI evaluates 100% of interactions against compliance and empathy rubrics.")
+    
+    qa_df = get_data("""
+        SELECT c.user_message, c.ai_response, q.overall_score, q.qa_feedback, q.requires_human_review 
+        FROM fact_quality_scores q
+        JOIN conversation_logs c ON q.log_id = c.id
+        ORDER BY q.evaluated_at DESC;
+    """)
+    
+    if not qa_df.empty:
+        # Highlight interactions that need human review
+        needs_review = qa_df[qa_df['requires_human_review'] == True]
+        if not needs_review.empty:
+            st.error(f"⚠️ {len(needs_review)} interactions flagged for human QA review due to policy or empathy concerns.")
+            
+        st.dataframe(qa_df[['user_message', 'ai_response', 'overall_score', 'qa_feedback']])
+    else:
+        st.info("No QA scores found. Run the QA evaluator script.")
