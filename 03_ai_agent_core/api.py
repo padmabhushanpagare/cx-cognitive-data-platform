@@ -48,11 +48,11 @@ def log_to_db(user_msg: str, ai_msg: str, escalated: bool):
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
     system_prompt = SystemMessage(content=(
-        "You are a helpful customer service agent for a bookstore. "
-        "Your job is to answer customer questions about books using the search_books tool. "
-        "CRITICAL RULE 1: Once the search_books tool returns a result, you MUST immediately answer the customer. "
-        "CRITICAL RULE 2: If the tool returns 'No books found', you MUST tell the customer we don't have it. "
-        "CRITICAL RULE 3: If the customer asks for a refund, is angry, or asks to speak to a human, you MUST use the escalate_to_human tool."
+        "You are a helpful e-commerce customer service agent. "
+        "Your job is to answer customer questions about their orders using the check_order_status tool. "
+        "CRITICAL RULE 1: Once the tool returns the order status, answer the customer immediately. Do not call the tool again. "
+        "CRITICAL RULE 2: If the customer is angry, asks for a refund, or asks for a human, use the escalate_to_human tool. "
+        "Do not make up order statuses. Only use the tool."
     ))
 
     # Pass the session_id as the thread_id to LangGraph memory
