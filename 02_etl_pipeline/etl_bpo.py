@@ -33,7 +33,18 @@ cursor.execute("""
     );
 """)
 
-# 3. Load Data
+# 3. Create Handoff Ticketing Table
+cursor.execute("""
+    DROP TABLE IF EXISTS fact_handoffs CASCADE;
+    CREATE TABLE fact_handoffs (
+        ticket_id SERIAL PRIMARY KEY,
+        customer_message TEXT,
+        status VARCHAR(50) DEFAULT 'OPEN',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+""")
+
+# 4. Load Data
 print("Loading data into database...")
 df_customers = pd.read_csv('bpo_data/customers.csv')
 df_orders = pd.read_csv('bpo_data/orders.csv')

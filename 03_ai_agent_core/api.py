@@ -47,24 +47,47 @@ def log_to_db(user_msg: str, ai_msg: str, escalated: bool):
         print(f"Database logging failed: {e}")
 
 
+from ml_router import predict_intent
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    # 1. ML ROUTING: Predict intent instantly using PyTorch
-    predicted_intent = predict_intent(request.message)
-    print(f"\n[ML ROUTER] Detected Intent: {predicted_intent}")
+    # 1. ML ROUTING with Confidence Threshold
+    predicted_intent, confidence = predict_intent(request.message)
+    print(f"\n[ML ROUTER] Detected Intent: {predicted_intent} (Confidence: {confidence:.2f})")
     
+    # If the model is less than 60% sure, route to a human to be safe
+    if confidence < 0.60:
+        predicted_intent = "escalate"
+        print("[ML ROUTER] Low confidence, forcing escalation.")
+
     # 2. DETERMINISTIC ROUTING: If angry, bypass LLM and escalate immediately
     if predicted_intent == "escalate":
         final_response = "I understand you are frustrated. I am transferring you to a human agent immediately."
+        
+        # Persist the handoff ticket to PostgreSQL
+        try:
+            conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user="admin", password="cx_secret_password", dbname="cx_platform")
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO fact_handoffs (customer_message, status) VALUES (%s, 'OPEN')", (request.message,))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Failed to create ticket: {e}")
+            
         log_to_db(request.message, final_response, True)
         return ChatResponse(response=final_response, requires_human=True)
 
-    # 3. LLM ROUTING: If it's a normal query, send to Llama 3.1
+    # 3. GENERAL ROUTING (No LLM needed for simple policy questions)
+    if predicted_intent == "general":
+        final_response = "For general inquiries, please visit our FAQ page at example.com/faq."
+        log_to_db(request.message, final_response, False)
+        return ChatResponse(response=final_response, requires_human=False)
+
+    # 4. LLM ROUTING: For order tracking
     system_prompt = SystemMessage(content=(
         "You are a helpful e-commerce customer service agent. "
         "Your job is to answer customer questions about their orders using the check_order_status tool. "
         "CRITICAL RULE 1: Once the tool returns the order status, answer the customer immediately. Do not call the tool again. "
-        "CRITICAL RULE 2: If the customer asks for a refund or human, use the escalate_to_human tool. "
         "Do not make up order statuses."
     ))
 

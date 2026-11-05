@@ -3,6 +3,8 @@ import random
 from datetime import datetime, timedelta
 import os
 
+random.seed(42)  # <--- ADD THIS FOR DETERMINISTIC DATA
+
 print("Generating synthetic BPO e-commerce data...")
 
 # 1. Generate Customers (Dimension Table)

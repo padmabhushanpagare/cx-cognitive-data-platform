@@ -17,7 +17,7 @@ def test_ml_router_escalation():
         "My item arrived damaged, give me my money back."
     ]
     for q in queries:
-        intent = predict_intent(q)
+        intent, confidence = predict_intent(q)  # <--- UNPACK TUPLE
         assert intent == "escalate", f"FAIL: ML Router did not escalate query: '{q}'"
 
 def test_ml_router_order_status():
@@ -28,7 +28,7 @@ def test_ml_router_order_status():
         "Did my item ship yet?"
     ]
     for q in queries:
-        intent = predict_intent(q)
+        intent, confidence = predict_intent(q)  # <--- UNPACK TUPLE
         assert intent == "check_order", f"FAIL: ML Router did not route to check_order: '{q}'"
 
 def test_ml_router_general():
@@ -38,9 +38,8 @@ def test_ml_router_general():
         "Do you ship internationally?"
     ]
     for q in queries:
-        intent = predict_intent(q)
+        intent, confidence = predict_intent(q)  # <--- UNPACK TUPLE
         assert intent == "general", f"FAIL: ML Router did not route to general: '{q}'"
-
 def test_agent_order_tool():
     """Test 4: Does the database tool correctly retrieve order data from PostgreSQL?"""
     # Import the tool directly

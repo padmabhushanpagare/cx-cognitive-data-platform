@@ -25,12 +25,15 @@ model = IntentClassifier(input_size, 64, len(label_encoder.classes_))
 model.load_state_dict(torch.load(os.path.join(BASE_DIR, "intent_model.pth"), map_location=torch.device('cpu')))
 model.eval()
 
-def predict_intent(text: str) -> str:
+def predict_intent(text: str):
     X = vectorizer.transform([text]).toarray()
     X_tensor = torch.FloatTensor(X)
     
     with torch.no_grad():
         output = model(X_tensor)
-        _, predicted = torch.max(output.data, 1)
+        # Get probabilities using Softmax
+        probabilities = torch.nn.functional.softmax(output, dim=1)
+        confidence, predicted = torch.max(probabilities, 1)
         
-    return label_encoder.inverse_transform(predicted.numpy())[0]
+    intent = label_encoder.inverse_transform(predicted.numpy())[0]
+    return intent, confidence.item() # <--- Return both intent and confidence
