@@ -5,17 +5,21 @@ import os
 
 st.set_page_config(page_title="Enterprise CX Platform", page_icon="🤖", layout="centered")
 st.title("🤖 Enterprise CX Agent")
-st.markdown("Welcome to the autonomous customer experience portal. Ask about our books or request a human agent.")
+st.markdown("Welcome to the autonomous customer experience portal.")
 
-# Read API URL from environment (Docker) or default to localhost
 API_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
-# Initialize Chat History and Session ID
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
-    # Generate a unique ID for this chat session
     st.session_state.session_id = str(uuid.uuid4())
+
+# --- NEW: Customer ID Input ---
+# For a real app, this would be a login screen. For now, it's a simple text input.
+with st.sidebar:
+    st.header("Customer Authentication")
+    customer_id = st.text_input("Enter your Customer ID", value="CUST-1001")
+    st.caption("Try CUST-1001 to CUST-1020 to test authorization.")
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -26,7 +30,11 @@ if prompt := st.chat_input("Type your message here..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    payload = {"message": prompt, "session_id": st.session_state.session_id}
+    payload = {
+        "message": prompt, 
+        "session_id": st.session_state.session_id,
+        "customer_id": customer_id # <--- Sending customer_id to API
+    }
     
     with st.spinner("Agent is thinking..."):
         try:

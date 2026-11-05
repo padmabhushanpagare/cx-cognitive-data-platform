@@ -1,71 +1,76 @@
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
-import numpy as np
-from train_data import get_data
+from sklearn.metrics import classification_report, confusion_matrix
+import joblib
 
-# 1. Prepare Data
-data = get_data()
-texts = [x[0] for x in data]
-labels = [x[1] for x in data]
+# 1. Load Data
+df = pd.read_csv("intent_dataset.csv")
+X_text = df["text"].values
+y_labels = df["intent"].values
 
-# Convert text to numerical vectors using TF-IDF
-vectorizer = TfidfVectorizer(max_features=100)
-X = vectorizer.fit_transform(texts).toarray()
+# 2. Train/Test Split (80% train, 20% test)
+X_train, X_test, y_train, y_test = train_test_split(X_text, y_labels, test_size=0.2, random_state=42, stratify=y_labels)
 
-# Convert labels (strings) to integers (0, 1, 2)
+# 3. Vectorize
+vectorizer = TfidfVectorizer(max_features=500)
+X_train_vec = vectorizer.fit_transform(X_train).toarray()
+X_test_vec = vectorizer.transform(X_test).toarray()
+
+# 4. Encode Labels
 label_encoder = LabelEncoder()
-y = label_encoder.fit_transform(labels)
+y_train_enc = label_encoder.fit_transform(y_train)
+y_test_enc = label_encoder.transform(y_test)
 
-# Convert to PyTorch Tensors
-X_tensor = torch.FloatTensor(X)
-y_tensor = torch.LongTensor(y)
+# 5. Convert to Tensors
+X_train_t = torch.FloatTensor(X_train_vec)
+y_train_t = torch.LongTensor(y_train_enc)
+X_test_t = torch.FloatTensor(X_test_vec)
+y_test_t = torch.LongTensor(y_test_enc)
 
-# 2. Define the Neural Network Architecture
+# 6. Define Model
 class IntentClassifier(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
         super(IntentClassifier, self).__init__()
-        # Layer 1: Input to Hidden
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
-        # Layer 2: Hidden to Output
         self.fc2 = nn.Linear(hidden_size, num_classes)
-        
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)
         out = self.fc2(out)
         return out
 
-# 3. Initialize Model, Loss Function, and Optimizer
-input_size = X.shape[1]
-hidden_size = 64
-num_classes = len(label_encoder.classes_)
-
-model = IntentClassifier(input_size, hidden_size, num_classes)
+model = IntentClassifier(X_train_vec.shape[1], 64, len(label_encoder.classes_))
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 
-# 4. Training Loop
-print("Training PyTorch Intent Classifier...")
-epochs = 200
-for epoch in range(epochs):
+# 7. Train
+print("Training...")
+for epoch in range(100):
     optimizer.zero_grad()
-    outputs = model(X_tensor)
-    loss = criterion(outputs, y_tensor)
+    outputs = model(X_train_t)
+    loss = criterion(outputs, y_train_t)
     loss.backward()
     optimizer.step()
-    
-    if (epoch + 1) % 50 == 0:
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
 
-# 5. Save the Model and Vectorizer
-print("Training complete! Saving model...")
+# 8. Evaluate on Test Set
+print("\n--- EVALUATION ON HELD-OUT TEST SET ---")
+model.eval()
+with torch.no_grad():
+    test_outputs = model(X_test_t)
+    _, predicted = torch.max(test_outputs, 1)
+
+print(classification_report(y_test_enc, predicted.numpy(), target_names=label_encoder.classes_))
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test_enc, predicted.numpy()))
+
+# 9. Save
 torch.save(model.state_dict(), "intent_model.pth")
-import joblib
 joblib.dump(vectorizer, "vectorizer.pkl")
 joblib.dump(label_encoder, "label_encoder.pkl")
-print(f"Model saved. Classes: {label_encoder.classes_}")
+print("Model saved.")

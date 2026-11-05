@@ -17,12 +17,13 @@ class IntentClassifier(nn.Module):
 
 # Load artifacts relative to this script's location
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ARTIFACTS_DIR = os.path.join(BASE_DIR, "artifacts") # <--- Added artifacts folder
 vectorizer = joblib.load(os.path.join(BASE_DIR, "vectorizer.pkl"))
 label_encoder = joblib.load(os.path.join(BASE_DIR, "label_encoder.pkl"))
 
 input_size = len(vectorizer.get_feature_names_out())
 model = IntentClassifier(input_size, 64, len(label_encoder.classes_))
-model.load_state_dict(torch.load(os.path.join(BASE_DIR, "intent_model.pth"), map_location=torch.device('cpu')))
+model.load_state_dict(torch.load(os.path.join(ARTIFACTS_DIR, "intent_model.pth"), map_location=torch.device('cpu')))
 model.eval()
 
 def predict_intent(text: str):

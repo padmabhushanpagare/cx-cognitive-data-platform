@@ -11,7 +11,9 @@ app = FastAPI(title="Enterprise CX Platform API")
 # Read DB config from Environment Variables (Docker)
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5434")
-
+DB_USER = os.getenv("DB_USER", "admin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "cx_secret_password")
+DB_NAME = os.getenv("DB_NAME", "cx_platform")
 class ChatRequest(BaseModel):
     message: str
     session_id: str  # <--- NEW: Required to track conversation memory
@@ -82,7 +84,7 @@ async def chat_endpoint(request: ChatRequest):
             final_response = "I apologize, but our ticketing system is currently down. Please try again later or call our support line."
             log_to_db(request.message, final_response, True)
             return ChatResponse(response=final_response, requires_human=False) # Don't say we transferred if we didn't
-            
+
     # 3. GENERAL ROUTING (No LLM needed for simple policy questions)
     if predicted_intent == "general":
         final_response = "For general inquiries, please visit our FAQ page at example.com/faq."
