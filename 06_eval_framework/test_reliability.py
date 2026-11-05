@@ -1,87 +1,55 @@
 import sys
 import os
-import time
+import pytest
+from unittest.mock import patch
 
-# Add the agent directory to the path so we can import it
+# Add the agent directory to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '03_ai_agent_core')))
 
-from agent import agent_app
-from langchain_core.messages import HumanMessage, SystemMessage
+# Import the ML Router
+from ml_router import predict_intent
 
-# Define the system prompt used by the API
-SYSTEM_PROMPT = SystemMessage(content=(
-    "You are a helpful customer service agent for a bookstore. "
-    "Your job is to answer customer questions about books using the search_books tool. "
-    "CRITICAL RULE 1: Once the search_books tool returns a result, you MUST immediately answer the customer. Do NOT call the tool again. "
-    "CRITICAL RULE 2: If the customer asks for a refund, is angry, or asks to speak to a human, you MUST use the escalate_to_human tool. "
-    "Do not try to solve refunds yourself."
-))
+def test_ml_router_escalation():
+    """Test 1: Does the PyTorch model correctly identify angry/refund messages?"""
+    queries = [
+        "I want a refund right now!",
+        "This is unacceptable, let me speak to a manager.",
+        "My item arrived damaged, give me my money back."
+    ]
+    for q in queries:
+        intent = predict_intent(q)
+        assert intent == "escalate", f"FAIL: ML Router did not escalate query: '{q}'"
 
-def run_agent(query: str):
-    """Helper function to run the agent and return the output trace."""
-    inputs = {"messages": [SYSTEM_PROMPT, HumanMessage(content=query)]}
-    config = {"recursion_limit": 6}
-    
-    trace = []
-    start_time = time.time()
-    
-    for event in agent_app.stream(inputs, config=config):
-        for key, value in event.items():
-            trace.append((key, value))
-            
-    latency = time.time() - start_time
-    return trace, latency
+def test_ml_router_order_status():
+    """Test 2: Does the PyTorch model correctly identify order tracking?"""
+    queries = [
+        "Where is my order ORD-5003?",
+        "Can you track my package?",
+        "Did my item ship yet?"
+    ]
+    for q in queries:
+        intent = predict_intent(q)
+        assert intent == "check_order", f"FAIL: ML Router did not route to check_order: '{q}'"
 
-def test_tool_calling_accuracy():
-    """Test 1: Does the agent use the search tool for a book query?"""
-    query = "Do you have the book 'Sharp Objects'?"
-    trace, latency = run_agent(query)
-    
-    # Look through the trace to see if the search tool was used
-    tool_used = False
-    for key, value in trace:
-        if key == "tools":
-            tool_used = True
-            
-    # ASSERTION: If tool_used is False, the test fails.
-    assert tool_used == True, "FAIL: Agent did not use the search tool for a book query."
-    print(f"\n[PASS] Tool Accuracy Test. Latency: {latency:.2f}s")
+def test_ml_router_general():
+    """Test 3: Does the PyTorch model correctly identify general questions?"""
+    queries = [
+        "What is your return policy?",
+        "Do you ship internationally?"
+    ]
+    for q in queries:
+        intent = predict_intent(q)
+        assert intent == "general", f"FAIL: ML Router did not route to general: '{q}'"
 
-def test_human_handoff_accuracy():
-    """Test 2: Does the agent trigger human handoff for a refund request?"""
-    query = "I am furious! The book arrived damaged. Give me my money back right now!"
-    trace, latency = run_agent(query)
+def test_agent_order_tool():
+    """Test 4: Does the database tool correctly retrieve order data from PostgreSQL?"""
+    # Import the tool directly
+    from agent import check_order_status
     
-    handoff_triggered = False
-    for key, value in trace:
-        if key == "tools":
-            # Check if the escalation tool was the one called
-            for msg in value["messages"]:
-                if "SYSTEM_OVERRIDE" in msg.content:
-                    handoff_triggered = True
-                    
-    # ASSERTION
-    assert handoff_triggered == True, "FAIL: Agent did not escalate an angry refund request to a human."
-    print(f"\n[PASS] Human Handoff Test. Latency: {latency:.2f}s")
-
-def test_hallucination_prevention():
-    """Test 3: Does the agent hallucinate a book that doesn't exist?"""
-    query = "Do you have the book 'Harry Potter and the Half-Blood Prince'?"
-    trace, latency = run_agent(query)
+    # Test a known order from our synthetic data
+    result = check_order_status.invoke("ORD-5003")
     
-    final_answer = ""
-    for key, value in trace:
-        if key == "agent":
-            msg = value["messages"][-1]
-            if msg.content:
-                final_answer = msg.content.lower()
-                
-        # ASSERTION: If it hallucinated, it would make up a price or say "yes".
-    # Since Harry Potter isn't in the DB, it should say it doesn't have it.
-    hallucination_indicators = ["yes, we have", "yes, it is in stock", "£"]
-    
-    # Check if any hallucination indicators are in the final answer
-    is_hallucination = any(indicator in final_answer for indicator in hallucination_indicators)
-    
-    assert is_hallucination == False, f"FAIL: Agent hallucinated inventory. Response: {final_answer}"
-    print(f"\n[PASS] Hallucination Prevention Test. Latency: {latency:.2f}s")
+    # Assert that the tool found the order and returned the correct status
+    assert "Order ORD-5003" in result
+    assert "Delayed" in result
+    assert "not found" not in result
