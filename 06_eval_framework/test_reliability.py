@@ -42,16 +42,15 @@ def test_ml_router_general():
         assert intent == "general", f"FAIL: ML Router did not route to general: '{q}'"
 def test_agent_order_tool():
     """Test 4: Does the database tool correctly retrieve order data from PostgreSQL?"""
-    # Import the tool directly
     from agent import check_order_status
     
-    # Test a known order from our synthetic data
-    result = check_order_status.invoke({
-        "order_id": "ORD-5003", 
-        "customer_id": "CUST-1008" # <--- REPLACE THIS with the ID from Step 1
-    })
+    # Inject the secure config exactly like FastAPI does
+    test_config = {"configurable": {"customer_id": "CUST-1008"}}
     
-    # Assert that the tool found the order and returned the correct status
-    assert "Order ORD-5003" in result
-    #assert "Delayed" in result
+    result = check_order_status.invoke(
+        {"order_id": "ORD-5003"}, 
+        config=test_config
+    )
+    
+    assert "Order ORD-5003" in result, f"Expected order details, got: {result}"
     assert "not found" not in result
