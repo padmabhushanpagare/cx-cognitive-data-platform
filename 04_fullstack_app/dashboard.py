@@ -24,7 +24,7 @@ def get_data(query):
         return pd.DataFrame()
 
 # --- TABS ---
-tab1, tab2, tab3 = st.tabs(["📈 Analytics Overview", "🎧 Supervisor Handoff Queue", "🕵️ AI Quality Assurance"])
+tab1, tab2, tab3, tab4 = st.tabs(["📈 Analytics Overview", "🎧 Supervisor Handoff Queue", "🕵️ AI Quality Assurance", "🧠 Root Cause Intelligence"])
 with tab1:
     st.header("Operational Metrics")
     df = get_data("SELECT * FROM conversation_logs ORDER BY timestamp DESC;")
@@ -112,3 +112,39 @@ with tab3:
                         st.error(f"Failed to save override: {e}")
     else:
         st.info("No QA scores found. Run the QA evaluator script.")
+
+with tab4:
+    st.header("🧠 Root Cause Intelligence")
+    st.markdown("These are the top contact drivers extracted from customer conversations via NLP clustering.")
+    
+    # We can run the analysis dynamically in the UI
+    if st.button("Run Root Cause Analysis"):
+        with st.spinner("Analyzing NLP clusters..."):
+            try:
+                # Re-use the logic from our script
+                df_logs = get_data("SELECT user_message FROM conversation_logs;")
+                if len(df_logs) >= 5:
+                    from sklearn.feature_extraction.text import TfidfVectorizer
+                    from sklearn.cluster import KMeans
+                    
+                    vectorizer = TfidfVectorizer(stop_words='english', max_features=100)
+                    X = vectorizer.fit_transform(df_logs['user_message'])
+                    
+                    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+                    kmeans.fit(X)
+                    
+                    order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]
+                    terms = vectorizer.get_feature_names_out()
+                    
+                    for i in range(3):
+                        with st.expander(f"Topic #{i+1}"):
+                            keywords = [terms[ind] for ind in order_centroids[i, :5]]
+                            st.write(f"**Keywords:** {', '.join(keywords)}")
+                            examples = df_logs[kmeans.labels_ == i]['user_message'].head(3).tolist()
+                            st.write("**Examples:**")
+                            for ex in examples:
+                                st.write(f"- {ex}")
+                else:
+                    st.warning("Not enough chat logs to analyze. Send at least 5 messages in the chat UI.")
+            except Exception as e:
+                st.error(f"Failed to run analysis: {e}")

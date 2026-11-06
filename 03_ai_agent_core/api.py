@@ -70,13 +70,15 @@ async def chat_endpoint(request: ChatRequest):
 
     # 3. LLM Agent Routing
     system_prompt = SystemMessage(content=(
-        f"You are a helpful e-commerce customer service agent. The customer's ID is {request.customer_id}. "
-        "Your job is to answer questions about their orders using the check_order_status tool. "
-        "CRITICAL: You MUST use the customer's ID when checking order status. "
-        "Once the tool returns the order status, answer the customer immediately."
-    ))
+    "You are a helpful e-commerce customer service agent. "
+    "Your job is to answer questions about their orders using the check_order_status tool. "
+    "CRITICAL RULE 1: You must use the check_order_status tool **only once** per user query. After the tool returns a result, you must immediately provide a final answer to the customer. Do not call the tool again. "
+    "CRITICAL RULE 2: If the tool returns an error or 'not found', you must immediately stop and inform the customer you cannot find the order. Do not try to search again. "
+    "CRITICAL RULE 3: If the customer asks for a refund, is angry, or asks for a human, you must use the escalate_to_human tool. "
+    "Do not make up order statuses."
+))
 
-    config = {"configurable": {"thread_id": request.session_id}, "recursion_limit": 6}
+    config = {"configurable": {"thread_id": request.session_id}, "recursion_limit": 20}
     state = agent_app.get_state(config)
     if not state.values:
         inputs = {"messages": [system_prompt, HumanMessage(content=request.message)]}
