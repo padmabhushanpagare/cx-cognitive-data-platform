@@ -39,9 +39,8 @@ services:
       - DB_USER=${DB_USER:-admin}
       - DB_PASSWORD=${DB_PASSWORD:-cx_secret_password}
       - DB_NAME=${DB_NAME:-cx_platform}
-      
     volumes:
-      - chroma_data:/app/chroma_db          # <--- Persists the vector DB
+      - chroma_data:/app/chroma_db
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -57,6 +56,9 @@ services:
       - API_BASE_URL=http://api:8000
       - DB_HOST=postgres_db
       - DB_PORT=5432
+      - DB_USER=${DB_USER:-admin}               # <--- ADDED
+      - DB_PASSWORD=${DB_PASSWORD:-cx_secret_password} # <--- ADDED
+      - DB_NAME=${DB_NAME:-cx_platform}         # <--- ADDED
     dns:
       - 8.8.8.8
       - 8.8.4.4

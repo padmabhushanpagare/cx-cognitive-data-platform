@@ -1,21 +1,26 @@
 import pandas as pd
-import psycopg2
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
+from sqlalchemy import create_engine
 import os
 
-# DB Config
+# --- ENVIRONMENT CONFIGURATION ---
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5434")
+DB_USER = os.getenv("DB_USER", "admin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "cx_secret_password")
+DB_NAME = os.getenv("DB_NAME", "cx_platform")
+
+# Create SQLAlchemy Engine for Pandas
+DB_URL = f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+engine = create_engine(DB_URL)
 
 def analyze_root_causes():
-    print("Connecting to database...")
-    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user="admin", password="cx_secret_password", dbname="cx_platform")
+    print(f"Connecting to database at {DB_HOST}:{DB_PORT}...")
     
     # Query all user messages
     query = "SELECT user_message FROM conversation_logs;"
-    df = pd.read_sql(query, conn)
-    conn.close()
+    df = pd.read_sql(query, engine)
 
     if len(df) < 5:
         print("Not enough data to analyze. Please chat with the AI a few more times.")
@@ -52,14 +57,11 @@ def analyze_root_causes():
 
     # 4. Cross-reference with Order Data
     print("\n--- OPERATIONAL CORRELATION ---")
-    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user="admin", password="cx_secret_password", dbname="cx_platform")
     order_query = "SELECT status, COUNT(*) as count FROM fact_orders GROUP BY status ORDER BY count DESC;"
-    order_df = pd.read_sql(order_query, conn)
-    conn.close()
+    order_df = pd.read_sql(order_query, engine)
     
     print("Order Status Bottlenecks (What might be driving contacts):")
     print(order_df.to_string(index=False))
 
 if __name__ == "__main__":
     analyze_root_causes()
-

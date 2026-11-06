@@ -7,19 +7,36 @@ st.set_page_config(page_title="Enterprise CX Platform", page_icon="🤖", layout
 st.title("🤖 Enterprise CX Agent")
 st.markdown("Welcome to the autonomous customer experience portal.")
 
-API_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+# Fail fast if API URL is missing
+API_URL = os.getenv("API_BASE_URL")
+if not API_URL:
+    st.error("CRITICAL: API_BASE_URL environment variable is not set.")
+    st.stop()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+if "is_authenticated" not in st.session_state:
+    st.session_state.is_authenticated = False
 
-# --- NEW: Customer ID Input ---
-# For a real app, this would be a login screen. For now, it's a simple text input.
 with st.sidebar:
     st.header("Customer Authentication")
-    customer_id = st.text_input("Enter your Customer ID", value="CUST-1001")
-    st.caption("Try CUST-1001 to CUST-1020 to test authorization.")
+    # No default value. User must type it.
+    input_customer_id = st.text_input("Enter your Customer ID")
+    
+    if st.button("Authenticate"):
+        if input_customer_id.strip():
+            st.session_state.customer_id = input_customer_id.strip().upper()
+            st.session_state.is_authenticated = True
+            st.success(f"Authenticated as {st.session_state.customer_id}")
+        else:
+            st.error("Please enter a valid Customer ID.")
+
+# Block chat until authenticated
+if not st.session_state.is_authenticated:
+    st.info("👈 Please authenticate using the sidebar to start chatting.")
+    st.stop()
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -33,7 +50,7 @@ if prompt := st.chat_input("Type your message here..."):
     payload = {
         "message": prompt, 
         "session_id": st.session_state.session_id,
-        "customer_id": customer_id # <--- Sending customer_id to API
+        "customer_id": st.session_state.customer_id
     }
     
     with st.spinner("Agent is thinking..."):

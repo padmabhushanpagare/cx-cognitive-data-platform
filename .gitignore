@@ -19,4 +19,4 @@ venv/
 raw_data/
 chroma_db/
 arifacts/
-*.sqlite3
+*.sqlite3.env

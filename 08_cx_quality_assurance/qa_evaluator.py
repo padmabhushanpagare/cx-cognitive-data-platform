@@ -5,9 +5,12 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
-# DB Config
+# --- ENVIRONMENT CONFIGURATION ---
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "5434")
+DB_USER = os.getenv("DB_USER", "admin")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "cx_secret_password")
+DB_NAME = os.getenv("DB_NAME", "cx_platform")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # 1. Initialize our local LLM
@@ -41,8 +44,8 @@ You must output ONLY a valid JSON object with exactly these keys:
 qa_chain = qa_prompt | llm | JsonOutputParser()
 
 def evaluate_recent_interactions():
-    print("Connecting to database...")
-    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user="admin", password="cx_secret_password", dbname="cx_platform")
+    print(f"Connecting to database at {DB_HOST}:{DB_PORT}...")
+    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, dbname=DB_NAME)
     cursor = conn.cursor()
     
     # Get interactions that haven't been scored yet

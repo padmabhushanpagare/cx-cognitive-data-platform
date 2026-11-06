@@ -1,117 +1,111 @@
 import os
-import psycopg2
 from typing import Annotated, TypedDict
 from langchain_core.tools import tool
-from llm_factory import get_chat_model, get_embedding_model
+from langchain_core.runnables import RunnableConfig
+from llm_factory import get_chat_model
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres import PostgresSaver
 from db import get_db_connection
+from langchain_core.messages import SystemMessage
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
+    tool_call_count: int
 
-# 1. NEW TOOL: Check Order Status
 @tool
-def check_order_status(order_id: str, customer_id: str) -> str:
-    """Use this tool to look up the status of an order. Requires both order_id (e.g., ORD-5001) and the customer's ID."""
-    print(f"\n[AGENT ACTION] Querying Order: {order_id} for Customer: {customer_id}")
+def check_order_status(order_id: str, config: RunnableConfig) -> str:
+    """Use this tool to look up the status of an order. Requires the order_id (e.g., ORD-5001)."""
+    customer_id = config.get("configurable", {}).get("customer_id", "UNKNOWN")
     
-    db_host = os.getenv("DB_HOST", "localhost")
-    db_port = os.getenv("DB_PORT", "5434")
+    # Normalize order ID to handle LLM hallucinations like "ORD 5003"
+    clean_order_id = order_id.strip().upper().replace(" ", "-")
+    print(f"\n[AGENT ACTION] Querying Order: '{clean_order_id}' for Customer: '{customer_id}'")
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # SECURITY: Query requires BOTH order_id and customer_id to match
-        query = """
-            SELECT o.order_id, c.name, o.status, o.amount, o.order_date 
-            FROM fact_orders o
-            JOIN dim_customers c ON o.customer_id = c.customer_id
-            WHERE o.order_id = %s AND o.customer_id = %s;
-        """
-        cursor.execute(query, (order_id.strip().upper(), customer_id.strip().upper()))
-        result = cursor.fetchone()
-        
-        cursor.close()
-        conn.close()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT o.order_id, c.name, o.status, o.amount, o.order_date 
+                FROM fact_orders o
+                JOIN dim_customers c ON o.customer_id = c.customer_id
+                WHERE o.order_id = %s AND o.customer_id = %s;
+            """
+            cursor.execute(query, (clean_order_id, customer_id.strip().upper()))
+            result = cursor.fetchone()
+            cursor.close()
         
         if result:
-            return f"Order {result[0]} for {result[1]}: Status is '{result[2]}'. Amount: ${result[3]}. Ordered on: {result[4]}."
+            return f"Order {result[0]} for {result[1]}: Status is '{result[2]}'. Amount: ${result[3]}."
         else:
-            return f"Order {order_id} not found, or you are not authorized to view it."
-            
+            return f"Order {clean_order_id} not found, or you are not authorized to view it."
     except Exception as e:
         return f"Database error: {e}"
 
-# 2. NEW TOOL: Escalate to Human
 @tool
-def escalate_to_human(reason: str) -> str:
-    """Use this tool ONLY if the customer is angry, requests a refund, or asks for a human/manager."""
-    print(f"\n[AGENT ACTION] ESCALATING TO HUMAN. Reason: {reason}")
-    return "SYSTEM_OVERRIDE: The user has been transferred to a human agent. STOP generating text and end the conversation."
+def escalate_to_human(reason: str, config: RunnableConfig) -> str:
+    """Use this tool ONLY if the customer is angry, requests a refund, or asks for a human."""
+    customer_id = config.get("configurable", {}).get("customer_id", "UNKNOWN")
+    print(f"\n[AGENT ACTION] ESCALATING TO HUMAN. Reason: {reason} for {customer_id}")
+    
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO fact_handoffs (customer_message, status) VALUES (%s, 'OPEN')", 
+                (f"[{customer_id}] Escalation: {reason}",)
+            )
+            conn.commit()
+            cursor.close()
+        return "SYSTEM_OVERRIDE: A ticket has been created. Tell the user they are being transferred."
+    except Exception as e:
+        print(f"CRITICAL: Ticket creation failed: {e}")
+        return "SYSTEM_ERROR: The ticketing system is down. Apologize."
 
-# 3. Initialize LLM and bind tools
-print("Initializing LLM via Factory...")
 llm = get_chat_model()
-tools = [check_order_status, escalate_to_human] # <--- Updated tools list
+tools = [check_order_status, escalate_to_human]
 llm_with_tools = llm.bind_tools(tools)
 
-# 4. Define the Nodes
 def agent_node(state: AgentState):
+    count = state.get("tool_call_count", 0)
+    
+    if count >= 1:
+        print("\n--- LLM THINKING (Forcing Final Answer) ---")
+        messages = state["messages"] + [SystemMessage(content="You have already used the tool. Do NOT use it again. Provide your final answer to the user based on the tool output.")]
+        response = llm.invoke(messages)
+        return {"messages": [response], "tool_call_count": count}
+        
     print("\n--- LLM THINKING ---")
     response = llm_with_tools.invoke(state["messages"])
-    return {"messages": [response]}
+    if response.tool_calls:
+        count += 1
+    return {"messages": [response], "tool_call_count": count}
 
-# 5. Build the Graph
-print("Building LangGraph...")
 graph_builder = StateGraph(AgentState)
 graph_builder.add_node("agent", agent_node)
 graph_builder.add_node("tools", ToolNode(tools))
-
 graph_builder.add_edge(START, "agent")
 
 def route_after_agent(state: AgentState):
     last_message = state["messages"][-1]
-    if last_message.tool_calls:
-        return "tools"
-    return END
+    if not last_message.tool_calls:
+        return END
+    return "tools"
 
 graph_builder.add_conditional_edges("agent", route_after_agent)
 graph_builder.add_edge("tools", "agent")
 
-memory = MemorySaver()
-agent_app = graph_builder.compile(checkpointer=memory)
-print("Agent successfully compiled!")
+# STRICT URI CONSTRUCTION
+DB_URI = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
 
-# 6. Local Testing
-if __name__ == "__main__":
-    from langchain_core.messages import HumanMessage, SystemMessage
-    
-    print("\n--- STARTING CUSTOMER INTERACTION ---")
-    # We are testing a specific order ID from our generated data
-    customer_query = "Hi, can you check the status of my order ORD-5003?"
-    print(f"Customer: {customer_query}")
-    
-    system_prompt = SystemMessage(content=(
-        "You are a helpful e-commerce customer service agent. "
-        "Your job is to answer customer questions about their orders using the check_order_status tool. "
-        "CRITICAL RULE 1: Once the tool returns the order status, answer the customer immediately. Do not call the tool again. "
-        "CRITICAL RULE 2: If the customer is angry, asks for a refund, or asks for a human, use the escalate_to_human tool. "
-    ))
-    
-    config = {"configurable": {"thread_id": "test-123"}, "recursion_limit": 6}
-    inputs = {"messages": [system_prompt, HumanMessage(content=customer_query)]}
-    
-    for event in agent_app.stream(inputs, config=config):
-        for key, value in event.items():
-            if key == "agent":
-                msg = value["messages"][-1]
-                if msg.tool_calls:
-                    print(f"Decided to use tool: {msg.tool_calls[0]['name']}")
-                elif msg.content:
-                    print(f"Final Answer to Customer:\n{msg.content}")
-            elif key == "tools":
-                print(f"[TOOLS] Output returned to agent.")
+try:
+    _memory_ctx = PostgresSaver.from_conn_string(DB_URI)
+    memory = _memory_ctx.__enter__()
+    memory.setup() 
+    agent_app = graph_builder.compile(checkpointer=memory)
+    print("✅ Agent successfully compiled with PostgresSaver!")
+except Exception as e:
+    print(f"⚠️ Failed to connect PostgresSaver: {e}. Falling back to in-memory.")
+    from langgraph.checkpoint.memory import MemorySaver
+    agent_app = graph_builder.compile(checkpointer=MemorySaver())
