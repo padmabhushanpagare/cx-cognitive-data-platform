@@ -55,11 +55,14 @@ jobs:
         INSERT INTO dim_customers VALUES ('CUST-1008', 'Test User');
         INSERT INTO fact_orders VALUES ('ORD-5003', 'CUST-1008', 'Delayed', 100.00, '2026-01-01');"
 
-    # 4. Run the Pytest suite
+        # 4. Run the Pytest suite
     - name: Run Evaluation Tests
       env:
         DB_HOST: localhost
         DB_PORT: 5432
+        DB_USER: admin
+        DB_PASSWORD: cx_secret_password
+        DB_NAME: cx_platform
         LLM_PROVIDER: ollama
       run: |
         cd 06_eval_framework
